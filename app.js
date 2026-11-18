@@ -55,8 +55,12 @@ function buildForm() {
 
       <div id="pct-message" class="pct-message"></div>
 
-      <button type="button" id="scan-btn" class="secondary-btn">📸 Scan the tag instead</button>
-      <input type="file" id="scan-input" accept="image/*" style="display:none;">
+      <div class="scan-row">
+        <button type="button" id="scan-btn" class="secondary-btn">📷 Scan</button>
+        <button type="button" id="upload-btn" class="secondary-btn">📁 Upload</button>
+      </div>
+      <input type="file" id="scan-input" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="upload-input" accept="image/*" style="display:none;">
       <div id="scan-status" class="scan-status"></div>
 
       <button type="button" id="submit-btn" class="primary-btn">Is it worth it? 💸</button>
@@ -72,7 +76,11 @@ function buildForm() {
   document.getElementById("scan-btn").addEventListener("click", () => {
     document.getElementById("scan-input").click();
   });
+  document.getElementById("upload-btn").addEventListener("click", () => {
+    document.getElementById("upload-input").click();
+  });
   document.getElementById("scan-input").addEventListener("change", onScanFile);
+  document.getElementById("upload-input").addEventListener("change", onScanFile);
 }
 
 function addFabricRow(fibreKey, pct) {
@@ -320,7 +328,7 @@ function renderResult(data) {
       <div class="bar">${barSegments}</div>
       <div class="legend">${legend}</div>
 
-      <div class="verdict">${VERDICT_LABELS[verdict]}</div>
+      <div class="verdict v-${verdict}">${VERDICT_LABELS[verdict]}</div>
       <p class="explanation">${explanation}</p>
 
       ${naturalHTML}
