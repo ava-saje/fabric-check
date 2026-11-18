@@ -377,7 +377,7 @@ function onScanFile(event) {
 
   Tesseract.recognize(file, "eng")
     .then(({ data: { text } }) => {
-      const found = parseFabricText(text);
+      const { rows: found, skippedSecondary } = parseFabricText(text);
       if (found.length === 0) {
         status.textContent = "Couldn't read that one 😅 Try a clearer photo or type it in.";
         return;
@@ -385,14 +385,59 @@ function onScanFile(event) {
 
       document.getElementById("fabric-rows").innerHTML = "";
       found.forEach((f) => addFabricRow(f.fibreKey, f.pct));
-      status.textContent = `Found: ${found.map((f) => `${f.pct}% ${FIBRES[f.fibreKey].name}`).join(", ")}. Check it looks right 👀`;
+      const foundList = found.map((f) => `${f.pct}% ${FIBRES[f.fibreKey].name}`).join(", ");
+      const note = skippedSecondary ? " (ignored the lining — that's not what you're paying for)" : "";
+      status.textContent = `Found: ${foundList}.${note} Check it looks right 👀`;
     })
     .catch(() => {
       status.textContent = "Couldn't read that one 😅 Try a clearer photo or type it in.";
     });
 }
 
-function parseFabricText(text) {
+// Tags often list more than one fabric section (e.g. "Shell: ..." and "Lining: ...").
+// Each section is its own 100% — they must not be merged into one blend.
+const PRIMARY_SECTION_LABELS = [/\bshell\b\s*:?/gi, /\bouter\s*(?:shell|fabric)?\b\s*:?/gi, /\bface\s*fabric\b\s*:?/gi, /\bmain\s*fabric\b\s*:?/gi, /\bbody\b\s*:?/gi];
+const SECONDARY_SECTION_LABELS = [/\blining\b\s*:?/gi, /\bfilling\b\s*:?/gi, /\bpadding\b\s*:?/gi, /\bwadding\b\s*:?/gi, /\binterlining\b\s*:?/gi, /\bpocket(?:ing)?\b\s*:?/gi, /\btrim\b\s*:?/gi];
+
+function findSectionLabels(text) {
+  const matches = [];
+  PRIMARY_SECTION_LABELS.forEach((re) => {
+    let m;
+    while ((m = re.exec(text)) !== null) matches.push({ index: m.index, end: m.index + m[0].length, type: "primary" });
+  });
+  SECONDARY_SECTION_LABELS.forEach((re) => {
+    let m;
+    while ((m = re.exec(text)) !== null) matches.push({ index: m.index, end: m.index + m[0].length, type: "secondary" });
+  });
+  matches.sort((a, b) => a.index - b.index);
+  return matches;
+}
+
+// Returns { text, skippedSecondary } — the text to actually read fibres from.
+function extractPrimaryFabricText(text) {
+  const labels = findSectionLabels(text);
+  if (labels.length === 0) return { text, skippedSecondary: false };
+
+  const segments = labels.map((label, i) => ({
+    type: label.type,
+    text: text.slice(label.end, i + 1 < labels.length ? labels[i + 1].index : text.length),
+  }));
+
+  const primarySegments = segments.filter((s) => s.type === "primary");
+  const hasSecondary = segments.some((s) => s.type === "secondary");
+
+  if (primarySegments.length > 0) {
+    return { text: primarySegments.map((s) => s.text).join(" "), skippedSecondary: hasSecondary };
+  }
+
+  // No section is explicitly labelled "Shell"/"Outer"/etc, but a secondary one exists —
+  // assume whatever comes before it is the main fabric.
+  const firstSecondary = labels.find((l) => l.type === "secondary");
+  return { text: text.slice(0, firstSecondary.index), skippedSecondary: true };
+}
+
+function parseFabricText(rawText) {
+  const { text, skippedSecondary } = extractPrimaryFabricText(rawText);
   const found = [];
   const seenKeys = new Set();
 
@@ -420,7 +465,7 @@ function parseFabricText(text) {
     });
   });
 
-  return found;
+  return { rows: found, skippedSecondary };
 }
 
 // ---------- Boot ----------
